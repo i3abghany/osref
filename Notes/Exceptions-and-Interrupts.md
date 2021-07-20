@@ -124,17 +124,62 @@ Interrupts disable the trap flag (TF) that enables single-stepping while
 executing the ISR code. TF is restored to its previous value when IRET is
 called.
 
-## Individual exceptions
+## How an interrupt occurs?
 
-### 0 - Divide by zero
+How would a device, for example, the timer generate an interrupt?
 
-Occurs when the divisor operand of `DIV` or `IDIV` is zero.
+### The PIC:
 
-### 1 - Debug exception
+1. The timer is connected to the IR0 pin of the PIC, it asserts that pin.
+2. PIC sets the bit representing the IRQ in the _Interrupt Request Register_.
+3. The PIC examines the _Interrupt mask Register_ to see whether the interrupt
+must be serviced or not.
+4. The PIC notifies the processor about the interrupt
 
-Is triggered for a number of reasons; most prominently if the TF is set.
+### The CPU:
 
-An error code is not pushed to the stack on calling this exception. It can be
-determined by examining EFLAGS and debugging registers.
+1. First, it has to complete the instruction it's currently executing.
+2. The CPU then checks the `IF` flag in `EFLAGS` (only if set the interrupt is serviced)
+3. The CPU sends an acknowledgement for the PIC through the `INTA` pin.
+4. The PIC places the vector of the interrupt on the data lines.
+5. The PIC places the IRQ number on the data lines.
+6. PIC's _In Service Register_ gets the bit corresponding to the interrupt asserted.
 
-### 3 - Breakpoint 
+### Interruption Process:
+
+1. The CPU saves the state of the current process (EFLAGS, CS, EIP, ..., etc)
+2. Interrupt vector # given by the PIC is used to identify the ISR address.
+    1. In protected mode, vector # is used as an index into the IDT
+    2. In real mode, vector # is used as an index into the IVT.
+
+#### Real Mode
+
+1. CS:IP is loaded from the IVT entry, which transfers execution to the ISR.
+
+#### Protected Mode
+
+1. The interrupt gate is extracted from IDT[vector].
+2. The selector field of the interrupt gate is loaded into CS.
+3. The offset field is loaded into EIP.
+5. CS:EIP is now loaded and control flow is transfered to the ISR.
+
+### Completion of an Interrupt
+
+Control flow was transferred to the ISR, which would take the appropriate action
+to serve the device request for attention.
+
+During the ISR, all interrupts are masked by the PIC waiting for an _End of
+Interrupt_ (`EOI`) signal from the processor to unmask interrupts.
+
+When the `EOI` signal is sent to the PIC, it clears the set bit in `In Service
+Register`. 
+
+## MISC
+
+* Supporting exceptions/setting up IDT without programming the PIC would result
+in unwanted interrupt 8 (exception fault). That's because the timer interrupt
+IRQ line is connected to IR0 of the master PIC, which is mapped initially to
+0x08.
+
+* IRQ # -> Relevant to PIC. Numbers assigned to lines connected to devices.
+* Vector # -> Index in the Interrupt vector table.
